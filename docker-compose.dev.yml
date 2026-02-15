@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  dagster_user_code:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    container_name: dagster_user_code
+    restart: always
+    env_file:
+      - .env
+    environment:
+      DAGSTER_CURRENT_IMAGE: 'dagster_user_code'
+    volumes:
+      - ./user_code:/opt/dagster/app
+
+      - ./reports:/opt/dagster/reports
+
+    expose:
+      - "4000"
+    networks:
+      - dagster_network
+
+networks:
+  dagster_network:
+    external: true

@@ -1,0 +1,58 @@
+stages:
+  - docker
+  - deploy
+
+variables:
+  IMAGE_TAG: $CI_COMMIT_REF_SLUG
+  SWARM_MASTER_HOST: 172.27.129.181
+
+build-docker:
+  image: docker:24.0.5
+  tags:
+    - docker
+  services:
+    - docker:24.0.5-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_TLS_CERTDIR: ''
+  stage: docker
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+  script:
+    - docker info
+    - docker build -t $CI_REGISTRY_IMAGE:$IMAGE_TAG .
+    - docker push $CI_REGISTRY_IMAGE:$IMAGE_TAG
+  only:
+    - /^(\d+\.\d+\.\d+)-(test|staging|release)$/
+
+.deploy_template: &deploy
+  image: docker:24.0.5
+  stage: deploy
+  before_script:
+    - mkdir -p ./certs
+    - cp "$CC03_DOCKER_CLIENT_CA_PEM"     ./certs/ca.pem
+    - cp "$CC03_DOCKER_CLIENT_CERT_PEM"   ./certs/cert.pem
+    - cp "$CC03_DOCKER_CLIENT_KEY_PEM"    ./certs/key.pem
+    - cp "$APP_ENV_FILE" .env
+    - export DOCKER_TLS_VERIFY=1
+    - export DOCKER_CERT_PATH="$CI_PROJECT_DIR/certs"
+    - export DOCKER_HOST="tcp://${SWARM_MASTER_HOST}:2376"
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+  script:
+    - docker stack deploy --with-registry-auth -c docker-compose.yml $SWARM_STACK_NAME
+  when: manual
+  allow_failure: false
+  environment:
+    name: $ENVIRONMENT_NAME
+  only:
+    - /^(\d+\.\d+\.\d+)-(test|staging|release)$/
+
+deploy:prod:
+  <<: *deploy
+  variables:
+    SWARM_STACK_NAME: dagster-server
+    SWARM_NODE_HOSTNAME: cc07
+    ENVIRONMENT_NAME: prod
+  only:
+    - /^(\d+\.\d+\.\d+)-release$/
+  when: on_success # <-- deploy выполняется автоматически

@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  dagster_user_code:
+    image: $CI_REGISTRY_IMAGE:${IMAGE_TAG}
+    environment:
+      DAGSTER_CURRENT_IMAGE: ${CI_REGISTRY_IMAGE}
+    env_file:
+      - .env
+    deploy:
+      placement:
+        constraints: [ node.hostname == cc07 ]
+    networks:
+      - dagster_network
+
+networks:
+  dagster_network:
+    external: true
